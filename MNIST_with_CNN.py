@@ -54,6 +54,7 @@ def inference(images_placeholder, keep_prob):
 
 def loss(logits, labels):
     cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=labels, logits=logits))
+    tf.summary.scalar('cross_entropy', cross_entropy)
     return cross_entropy
 
 def training(loss, learning_rate):
@@ -63,37 +64,53 @@ def training(loss, learning_rate):
 def accuracy(logits, labels):
     correct_prediction = tf.equal(tf.argmax(logits, 1), tf.argmax(labels, 1))
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+    tf.summary.scalar('accuracy', accuracy)
     return accuracy
 
 if __name__ == '__main__':
-    x = tf.placeholder(tf.float32, [None, 784])
-    y_ = tf.placeholder(tf.float32, [None, 10])
-    W = tf.Variable(tf.zeros([784, 10]))
-    b = tf.Variable(tf.zeros([10]))
-    y = tf.nn.softmax(tf.matmul(x, W) + b)
-    keep_prob = tf.placeholder(tf.float32)
+    with tf.Graph().as_default():
+        x = tf.placeholder(tf.float32, [None, 784])
+        y_ = tf.placeholder(tf.float32, [None, 10])
+        W = tf.Variable(tf.zeros([784, 10]))
+        b = tf.Variable(tf.zeros([10]))
+        # y = tf.nn.softmax(tf.matmul(x, W) + b)
+        keep_prob = tf.placeholder(tf.float32)
+        tf.summary.scalar("dropout_keep_probability", keep_prob)
 
-    # 学習
-    logits = inference(x, keep_prob)
-    loss_value = loss(logits, y_)
-    train_op = training(loss_value, 1e-4)
-    accuracy = accuracy(logits, y_)
+        # 学習
+        logits = inference(x, keep_prob)
+        loss_value = loss(logits, y_)
+        train_op = training(loss_value, 1e-4)
+        accuracy = accuracy(logits, y_)
 
-    init = tf.global_variables_initializer()
-    sess = tf.Session()
-    sess.run(init)
+        sess = tf.Session()
 
-    for i in range(5000):
-        batch = mnist.train.next_batch(50)
-        if i % 100 == 0:
-            train_accuracy = sess.run(accuracy, feed_dict={
+        summary_op = tf.summary.merge_all()
+        train_writer = tf.summary.FileWriter("MNIST_data" + '/train', sess.graph)
+        test_writer = tf.summary.FileWriter("MNIST_data" + '/test', sess.graph)
+
+        init = tf.global_variables_initializer()
+        sess.run(init)
+
+        for i in range(5000):
+            batch = mnist.train.next_batch(50)
+            if i % 100 == 0:
+                
+                # if you write like this, then <Type Error: invalid type <type 'numpy.float32'>>
+                # "... accuracy = sess.run([..., accuracy], feed_dict=... "
+
+                summary, acc = sess.run([summary_op, accuracy], feed_dict={
+                    x: batch[0], y_: batch[1], keep_prob: 1.0
+                    })
+                test_writer.add_summary(summary, i)
+                print("step %d, training accuracy %g" % (i, acc))
+            summary, _ = sess.run([summary_op, train_op], feed_dict={
                 x: batch[0], y_: batch[1], keep_prob: 1.0
                 })
-            print("step %d, training accuracy %g" % (i, train_accuracy))
-        sess.run(train_op, feed_dict={
-            x: batch[0], y_: batch[1], keep_prob: 1.0
-            })
+            train_writer.add_summary(summary, i)
 
-    print("test accuracy %g" % sess.run(accuracy, feed_dict={
-        x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0
-    }))
+        summary, acc = sess.run([summary_op, accuracy], feed_dict={
+            x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0
+            })
+        test_writer.add_summary(summary, i)
+        print("test accuracy: %g" %  acc)
