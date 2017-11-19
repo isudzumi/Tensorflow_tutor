@@ -34,6 +34,7 @@ if __name__ == '__main__':
         with tf.name_scope('RNN') as scope:
             xs = tf.unstack(x, 28, 1)
             lstm_cell = rnn.BasicLSTMCell(128, forget_bias=1.0)
+            lstm_cell = rnn.DropoutWrapper(lstm_cell, output_keep_prob=keep_prob)
             outputs, states = tf.nn.static_rnn(lstm_cell, xs, dtype=tf.float32)
 
         # 学習
